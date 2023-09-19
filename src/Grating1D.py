@@ -2,13 +2,14 @@ import torch
 import matplotlib.pyplot as plt
 
 
-def even_case(M):
+def even_case_step2(M):
     return list(range(-2 * M + 1, 2 * M, 2))
 
-
-def odd_case(M):
+def odd_case_step2(M):
     return list(range(-2 * M + 2, 2 * M - 1, 2))
 
+def odd_case_step1(M):
+    return list(range(- M ,  M+1 , 1))
 
 def exp_then_FT(p_vec):
     """exp p_vec to get modulated field, then do FFT to get coefficience of each order
@@ -22,68 +23,67 @@ def exp_then_FT(p_vec):
     # return exp_p
     return torch.fft.fft(exp_p) / len(exp_p)
 
+def energy_of_orders(p_vec, orders):
+    """print energy of target order
+
+    Returns:
+        tensor: energy list of target order
+    """
+    coefficient = exp_then_FT(p_vec)
+    energy_list = torch.abs(coefficient[orders]) ** 2
+    return energy_list
+
+def _visualize(p_vec, orders):
+    """visualize the phase function and fourier coefficient"""
+    p_vec = p_vec.detach()
+    coefficient = exp_then_FT(p_vec)
+
+    plt.subplot(1, 2, 1)
+    plt.stem(p_vec.numpy())
+    plt.title("phase function")
+
+    plt.subplot(1, 2, 2)
+    plt.stem(torch.abs(coefficient).numpy())
+    plt.title("Fourier coefficient")
+
+    # test energy conserve
+    # frequency_energy = torch.sum(torch.abs(coefficient) ** 2).item()
+    # phase_energy = torch.sum(torch.abs(torch.exp(1j * p_vec)) ** 2).item()
+    # print("energy of frequncy domain", frequency_energy)
+    # print("energy of phase domain", phase_energy)
+
+    print("Calculate Energy Efficiency:")
+    print(
+        "Energy Efficiency =",
+        torch.sum(energy_of_orders(p_vec, orders)).detach().item(),
+    )
+    print("\n")
+
+    print("energy of some order:")
+    coeff_indices = [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6]
+    for index in coeff_indices:
+        coeff_value = coefficient[index]
+        magnitude = torch.abs(coeff_value).detach().item()
+        magnitude_squared = magnitude**2
+        # print(f"coefficient {index}: {coeff_value}, Magnitude: {magnitude}")
+        print(f"order {index}: {magnitude_squared}")
+    print("\n")
 
 class Grating1D(object):
     def __init__(self, orders) -> None:
         self.params = {}
         self.orders = torch.tensor(orders)
 
-    def energy_of_orders(self):
-        """print energy of target order
-
-        Returns:
-            tensor: energy list of target order
-        """
-        coefficient = exp_then_FT(self.get_p_vec())
-        energy_list = torch.abs(coefficient[self.orders]) ** 2
-        return energy_list
-
     def forward(self):
         pass
 
-    def get_p_vec(self):
-        return self.params["p_vec"]
-
     def visualize(self):
-        """visualize the phase function and fourier coefficient"""
-        p_vec = self.get_p_vec().detach()
+        pass
 
-        coefficient = exp_then_FT(p_vec).detach()
-
-        plt.subplot(1, 2, 1)
-        plt.stem(p_vec.numpy())
-        plt.title("phase function")
-
-        plt.subplot(1, 2, 2)
-        plt.stem(torch.abs(coefficient).numpy())
-        plt.title("Fourier coefficient")
-
-        # test energy conserve
-        # frequency_energy = torch.sum(torch.abs(coefficient) ** 2).item()
-        # phase_energy = torch.sum(torch.abs(torch.exp(1j * p_vec)) ** 2).item()
-        # print("energy of frequncy domain", frequency_energy)
-        # print("energy of phase domain", phase_energy)
-
-        print("Calculate Energy Efficiency:")
-        print(
-            "Energy Efficiency =",
-            torch.sum(self.energy_of_orders()).detach().item(),
-        )
-        print("\n")
-
-        print("energy of some order:")
-        coeff_indices = [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6]
-        for index in coeff_indices:
-            coeff_value = coefficient[index]
-            magnitude = torch.abs(coeff_value).detach().item()
-            magnitude_squared = magnitude**2
-            # print(f"coefficient {index}: {coeff_value}, Magnitude: {magnitude}")
-            print(f"order {index}: {magnitude_squared}")
-        print("\n")
 
 
 class ConstrainedOptimGrating1D(Grating1D):
-    def __init__(self, orders=[-1, 1], segment=10000, alpha=0.5) -> None:
+    def __init__(self, orders=[-1, 1], segment=1000, alpha=0.5) -> None:
         """initialize the grating, with hyperparameter alpha
 
         Args:
@@ -109,7 +109,7 @@ class ConstrainedOptimGrating1D(Grating1D):
 
         total_energy = 1  # phase domian magnitude is all 1, energy conserve
 
-        target_energy_list = self.energy_of_orders()
+        target_energy_list = energy_of_orders(self.params["p_vec"], self.orders)
         target_energy = torch.sum(target_energy_list)
 
         energy_efficiency = target_energy / total_energy
@@ -120,9 +120,12 @@ class ConstrainedOptimGrating1D(Grating1D):
 
         return loss
 
+    def visualize(self):
+        _visualize(self.params["p_vec"], self.orders)
+
 
 class LeastSquaresOptimGrating1D(Grating1D):
-    def __init__(self, orders=[-1, 1], segment=10000) -> None:
+    def __init__(self, orders=[-1, 1], segment=1000) -> None:
         """initialize the grating
 
         Args:
@@ -171,11 +174,12 @@ class LeastSquaresOptimGrating1D(Grating1D):
         for index, order in enumerate(self.orders):
             print(f"a_{order} = {self.params['a_vec'][index].item()}")
         print("\n")
-        return super().visualize()
+
+        _visualize(self.params["p_vec"], self.orders)
 
 
 class MinimumVarianceOptimGrating1D(Grating1D):
-    def __init__(self, orders, segment=10000) -> None:
+    def __init__(self, orders, segment=1000) -> None:
         super().__init__(orders)
 
         a_vec = torch.randn(self.orders.shape[0]) * 1
@@ -213,6 +217,9 @@ class MinimumVarianceOptimGrating1D(Grating1D):
         Returns:
             p_vec: p_vec
         """
+        # with 
+        # a_vecuuu = self.params["a_vec"]
+        # a_vec -= a_vec[a_vec.shape[0]//2]
 
         p_vec = torch.angle(self.sum_of_fourier_orders())
 
@@ -225,8 +232,7 @@ class MinimumVarianceOptimGrating1D(Grating1D):
             print(f"a_{order} = {self.params['a_vec'][index].item()}")
         print("\n")
 
-        return super().visualize()
-
+        _visualize(self.get_p_vec(), self.orders)
 
 
 class Solver(object):
