@@ -39,8 +39,18 @@ def _visualize(p_vec, orders):
     coefficient = exp_then_FT(p_vec)
 
     plt.subplot(1, 2, 1)
-    plt.stem(p_vec.numpy())
-    plt.title("phase function")
+    # plot the phase function, and filling to x axis
+
+    plt.plot(p_vec.numpy())
+    plt.fill_between(
+        range(p_vec.shape[0]),
+        p_vec.numpy(),
+        0,
+        facecolor="green",
+        interpolate=True,
+    )
+
+
 
     plt.subplot(1, 2, 2)
     plt.stem(torch.abs(coefficient).numpy())
